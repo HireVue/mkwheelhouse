@@ -103,11 +103,11 @@ class Bucket(object):
         return doc.getvalue()
 
 
-def build_wheels(packages, index_url, requirements, exclusions, sources):
+def build_wheels(packages, index_url, requirements, exclusions, sources, pip):
     temp_dir = tempfile.mkdtemp(prefix='mkwheelhouse-')
 
     args = [
-        'pip', 'wheel',
+        'wheel',
         '--wheel-dir', temp_dir,
         '--find-links', index_url,
         # pip < 7 doesn't invalidate HTTP cache based on last-modified
@@ -122,7 +122,10 @@ def build_wheels(packages, index_url, requirements, exclusions, sources):
         args += ['--no-binary', source]
 
     args += packages
-    subprocess.check_call(args)
+
+    # Create wheels using whavever PIP version(s) we were told to
+    for p in pip:
+        subprocess.check_call([p] + args)
 
     for exclusion in exclusions:
         matches = glob.glob(os.path.join(temp_dir, exclusion))
@@ -147,6 +150,9 @@ def main():
     parser.add_argument('-s', '--source', action='append', default=[],
                         metavar='NONBINARY',
                         help='prevent pip from using community pre-compiled wheels, use :all: for all')
+    parser.add_argument('-p', '--pip', action='append',
+                        default=['pip2', 'pip3'],
+                        help="Which pip version(s) to run")
     parser.add_argument('bucket')
     parser.add_argument('package', nargs='*', default=[])
 
@@ -164,7 +170,7 @@ def main():
     print('Using: ', index_url)
 
     build_dir = build_wheels(args.package, index_url, args.requirement,
-                             args.exclude, args.source)
+                             args.exclude, args.source, args.pip)
     bucket.sync(build_dir,args.acl)
     bucket.put(bucket.make_index(), 'index.html', args.acl)
     shutil.rmtree(build_dir)
